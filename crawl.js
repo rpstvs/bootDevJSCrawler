@@ -31,7 +31,7 @@ function normalizeURL(url){
   return fullPath
 }
 
-async function crawlPage(currentURL){
+async function crawlPage(baseURL, currentURL, pages){
   // fetch and parse the html of the currentURL
   console.log(`crawling ${currentURL}`)
   try {
