@@ -1,58 +1,96 @@
-const { JSDOM } = require('jsdom')
+import { JSDOM } from "jsdom"
 
-function getURLsFromHTML(htmlBody, baseURL){
-  const urls = []
-  const dom = new JSDOM(htmlBody)
-  const aElements = dom.window.document.querySelectorAll('a')
-  for (const aElement of aElements){
-    if (aElement.href.slice(0,1) === '/'){
-      try {
-        urls.push(new URL(aElement.href, baseURL).href)
-      } catch (err){
-        console.log(`${err.message}: ${aElement.href}`)
-      }
-    } else {
-      try {
-        urls.push(new URL(aElement.href).href)
-      } catch (err){
-        console.log(`${err.message}: ${aElement.href}`)
-      }
-    }
-  }
-  return urls
-}
-
-function normalizeURL(url){
+function normalizeURL(url) {
   const urlObj = new URL(url)
   let fullPath = `${urlObj.host}${urlObj.pathname}`
-  if (fullPath.length > 0 && fullPath.slice(-1) === '/'){
+  if (fullPath.slice(-1) === '/') {
     fullPath = fullPath.slice(0, -1)
   }
   return fullPath
 }
 
-async function crawlPage(baseURL, currentURL, pages){
-  // fetch and parse the html of the currentURL
-  console.log(`crawling ${currentURL}`)
-  try {
-    const resp = await fetch(currentURL)
-    if (resp.status > 399){
-      console.log(`Got HTTP error, status code: ${resp.status}`)
-      return
+function getURLsFromHTML(html, baseURL) {
+  const urls = []
+  const dom = new JSDOM(html)
+  const anchors = dom.window.document.querySelectorAll('a')
+
+  for (const anchor of anchors) {
+    if (anchor.hasAttribute('href')) {
+      let href = anchor.getAttribute('href')
+
+      try {
+        // convert any relative URLs to absolute URLs
+        href = new URL(href, baseURL).href
+        urls.push(href)
+      } catch(err) {
+        console.log(`${err.message}: ${href}`)
+      }
     }
-    const contentType = resp.headers.get('content-type')
-    if (!contentType.includes('text/html')){
-      console.log(`Got non-html response: ${contentType}`)
-      return
-    }
-    console.log(await resp.text())
-  } catch (err){
-    console.log(err.message)
   }
+
+  return urls
 }
 
-module.exports = {
-  normalizeURL,
-  getURLsFromHTML,
-  crawlPage
+async function fetchHTML(url) {
+  let res
+  try {
+    res = await fetch(url)
+  } catch (err) {
+    throw new Error(`Got Network error: ${err.message}`)
+  }
+
+  if (res.status > 399) {
+    throw new Error(`Got HTTP error: ${res.status} ${res.statusText}`)
+  }
+
+  const contentType = res.headers.get('content-type')
+  if (!contentType || !contentType.includes('text/html')) {
+    throw new Error(`Got non-HTML response: ${contentType}`)
+  }
+
+  return res.text()
 }
+
+// use default args to prime the first call
+async function crawlPage(baseURL, currentURL = baseURL, pages = {}) {
+  // if this is an offsite URL, bail immediately
+  const currentURLObj = new URL(currentURL)
+  const baseURLObj = new URL(baseURL)
+  if (currentURLObj.hostname !== baseURLObj.hostname) {
+    return pages
+  }
+
+  // use a consistent URL format
+  const normalizedURL = normalizeURL(currentURL)
+
+  // if we've already visited this page
+  // just increase the count and don't repeat
+  // the http request
+  if (pages[normalizedURL] > 0) {
+    pages[normalizedURL]++
+    return pages
+  }
+
+  
+  pages[normalizedURL] = 1
+
+  
+  console.log(`crawling ${currentURL}`)
+  let html = ''
+  try {
+    html = await fetchHTML(currentURL)
+  } catch (err) {
+    console.log(`${err.message}`)
+    return pages
+  }
+
+  
+  const nextURLs = getURLsFromHTML(html, baseURL)
+  for (const nextURL of nextURLs) {
+    pages = await crawlPage(baseURL, nextURL, pages)
+  }
+
+  return pages
+}
+
+export { normalizeURL, getURLsFromHTML, crawlPage }

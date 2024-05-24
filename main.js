@@ -1,17 +1,20 @@
-const {crawlPage} = require ('./crawl.js')
-
-function main (){
-
-    if(process.argv.length != 3){
-        console.log("Too many commands")
+import { crawlPage } from './crawl.js'
+async function main() {
+    if (process.argv.length < 3) {
+      console.log('no website provided')
+      return
     }
-
-    else {
-        console.log(`we are crawling into ${process.argv[2]}`)
-        crawlPage(process.argv[2]);
+    if (process.argv.length > 3) {
+      console.log('too many arguments provided')
+      return
     }
-
-
-}
-
-main();
+    const baseURL = process.argv[2]
+  
+    console.log(`starting crawl of: ${baseURL}...`)
+  
+    const pages = await crawlPage(baseURL)
+  
+    console.log(pages)
+  }
+  
+  main()
